@@ -83,7 +83,7 @@ pipeline {
     post {
         always {
             sh 'docker logout >/dev/null 2>&1 || true'
-            sh 'docker image prune -f >/dev/null 2>&1 || true'
+           sh 'docker image prune -af --filter "until=24h" >/dev/null 2>&1 || true'
         }
         success {
             echo 'Trend application deployed successfully.'
