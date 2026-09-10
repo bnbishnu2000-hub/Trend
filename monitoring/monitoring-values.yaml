@@ -1,0 +1,105 @@
+# kube-prometheus-stack values trimmed for a 4-node t3.micro EKS cluster.
+#
+# Constraints this file works around:
+#   - t3.micro allows only 4 pods per node (ENI limit), 16 slots total
+#   - ~700 MiB allocatable memory per node
+#   - no EBS CSI driver installed, so no PersistentVolumeClaims
+#
+# Install:
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace -f monitoring-values.yaml
+
+prometheus:
+  prometheusSpec:
+    retention: 6h
+
+    # No EBS CSI driver in this cluster, so storage must be ephemeral.
+    # Metrics are lost on pod restart. Acceptable for a demonstration;
+    # production would use a PVC with the gp3 storage class.
+    storageSpec: {}
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 300Mi
+      limits:
+        memory: 450Mi
+
+    # Pick up ServiceMonitors from all namespaces, not just this release's.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+grafana:
+  adminPassword: "admin123"
+
+  persistence:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 150Mi
+    limits:
+      memory: 400Mi
+
+  startupProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    failureThreshold: 60
+    periodSeconds: 10
+
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+
+  service:
+    type: ClusterIP
+
+  defaultDashboardsEnabled: true
+
+  # Access via: kubectl -n monitoring port-forward svc/monitoring-grafana 3001:80
+  service:
+    type: ClusterIP
+
+  defaultDashboardsEnabled: true
+
+# --- Disabled to fit the pod and memory budget --------------------------
+# Each of these would consume pod slots this cluster does not have.
+
+alertmanager:
+  enabled: false
+
+# A DaemonSet would need one slot on every node.
+nodeExporter:
+  enabled: false
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+    limits:
+      memory: 200Mi
+
+kubeStateMetrics:
+  enabled: false
+
+# Not reachable on an EKS managed control plane. Disabling these avoids
+# permanently "down" targets in the Prometheus UI.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
